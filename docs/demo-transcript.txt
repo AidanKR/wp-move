@@ -1,0 +1,33 @@
+
+== 1. Start the demo WordPress and seed it
+up: http://127.0.0.1:8088/ (HTTP 200)
+Warning: wordpress-importer: Plugin already installed.
+Warning: Plugin 'wordpress-importer' is already active.
+Warning: Regenerating a .htaccess file requires special configuration. See usage docs.
+Warning: Regenerating a .htaccess file requires special configuration. See usage docs.
+seeded
+
+== 2. Move it: wp-move pull (authenticated, so drafts and scheduled posts come too)
+site: wp-move demo (authenticated)
+source: posts=120, pages=24, media=37, categories=73, tags=118, users=3
+written: page/draft=1, page/publish=23, post/draft=1, post/future=1, post/publish=118
+media: 60/60 files ok (63 URLs)
+leftovers: {'dropped': 81, 'html': 507, 'dynamic-link': 15, 'protected': 1, 'shortcode': 1}
+redirects (keep): 0 path rules, 164 query rules, 139 archive URLs without a target
+manifest: out/.wp-move/manifest.json
+report: items 144/144, media 37/37, text<95%: 0, missing media: 0, broken links: 0, links to old site: 3564
+report: out/report.html
+exit code: 0
+
+== 3. Break a copy: delete one image and one post, then re-check
+report: items 143/144, media 36/37, text<95%: 1, missing media: 3, broken links: 0, links to old site: 3564
+report: out-broken/report.html
+exit code: 2
+
+== 4. Serve the generated nginx redirects and request every old URL
+report: items 144/144, media 37/37, text<95%: 0, missing media: 0, broken links: 0, links to old site: 3564
+redirects on http://127.0.0.1:8090: 164/164 ok
+report: out/report.html
+exit code: 0
+
+== Done. Open out/report.html and out-broken/report.html. Stop with: demo/down.sh && podman machine stop

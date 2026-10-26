@@ -4,7 +4,6 @@ version = "0.0.1"
 description = "Move a WordPress site you own to a static site, with a verification report."
 readme = "README.md"
 requires-python = ">=3.12"
-license = "MIT"
 dependencies = [
     "beautifulsoup4==4.15.0",
     "markdownify==1.2.3",

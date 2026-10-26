@@ -1,23 +1,89 @@
 # wp-move
 
-Move a WordPress site you own to a static site, and get a report that shows what moved, what is missing, and what broke.
+Move a WordPress site you own to Markdown, and get a report that shows what moved, what is missing, and what broke.
 
-Status: early work. `pull`, redirects, and the verification report work against the local demo site (see [`demo/`](demo/)).
+Migration tools usually stop at "export finished". wp-move also checks the result: every post, page and media file, how much of each page's text survived, every image and internal link, and whether every old URL redirects to the new one.
+
+![Report on a clean move, then on a copy with one image and one post deleted](docs/report-demo.gif)
+
+*Clean move: everything green. Then one image and one post are deleted from a copy, and the report flags 143/144 items, 36/37 media files and 3 broken image references. The exit code is 2.*
+
+## Quick start
 
 ```bash
 uv sync
-WPMOVE_USER=... WPMOVE_APP_PASSWORD=... uv run wp-move pull https://example.com --out out --url-style keep
+uv run wp-move pull https://your-site.example --out out
+open out/report.html
 ```
 
-`pull` ends by writing `out/report.html` and `out/report.json`. Re-check an output folder any time with `uv run wp-move report --out out`, optionally with `--server http://host` to request every old URL against a server running the generated redirects. The exit code is 2 when items, media files, image references, or internal links are missing.
+Public content works without credentials. To include drafts, scheduled and private posts, create an Application Password in WordPress (Users → Profile) and pass it through the environment only:
 
-`--url-style keep` (default) reuses the old permalinks, so only `?p=` / `?page_id=` and `/wp-content/uploads/` need redirects; `slug` moves posts to `/posts/<slug>/`. Redirects are written to `out/redirects/` as `_redirects`, `nginx-maps.conf` + `nginx-server.conf`, and `url-map.csv`. The nginx files are checked against a real nginx with `demo/check_redirects.py`; the `_redirects` file has not been tested on Netlify or Cloudflare Pages yet.
+```bash
+export WPMOVE_USER=your-user
+export WPMOVE_APP_PASSWORD='xxxx xxxx xxxx xxxx xxxx xxxx'
+uv run wp-move pull https://your-site.example --out out
+```
 
-Planned MVP:
-- Pull posts, pages, drafts, media, categories, and tags through the WP REST API.
-- Convert to Markdown with front matter. Keep unconverted blocks and shortcodes as HTML and list them.
-- Download images and rewrite their paths.
-- Map old URLs to new ones and emit redirect files (`_redirects`, nginx).
-- Write a verification report (`report.html` / `report.json`) with counts per type, text similarity per page, broken links and images, and redirect coverage.
+Re-check an output folder at any time, optionally against a server running the generated redirects:
 
-Principles: the source site is read only, nothing is sent to third parties, dependencies are pinned, and credentials come only from environment variables.
+```bash
+uv run wp-move report --out out --server http://localhost:8080
+```
+
+## What you get
+
+```
+out/
+  content/posts/*.md        Markdown with front matter (title, dates, slug, url, status, author,
+  content/pages/**/*.md     categories, tags, featured_image, excerpt, old_url, wp_id)
+  public/media/...          images and files hosted on your site, paths rewritten in the Markdown
+  redirects/_redirects      Netlify-style rules
+  redirects/nginx-*.conf    nginx maps + server snippet
+  redirects/url-map.csv     old URL -> new path for every item
+  report.html, report.json  the verification report
+```
+
+## What the report checks
+
+| Check | Fails the run (exit 2) |
+|---|---|
+| Posts and pages per status: in the source vs written to disk | yes |
+| Media originals: in the source vs saved | yes |
+| Image/media references in the Markdown that point to a missing file | yes |
+| Internal links with no target in the new site | yes |
+| Share of each page's source words kept in the Markdown (flags pages under 95%) | no, listed |
+| Links that still point at the old site, by kind (archives, admin, home, …) | no, listed |
+| Content kept as raw HTML, dropped (script/style), or unrendered shortcodes | no, listed |
+| Images hosted elsewhere (not downloaded) | no, listed |
+| Category/tag archive URLs that have no page yet | no, listed |
+| With `--server`: every old URL returns 301 to its new path | listed |
+
+## URLs and redirects
+
+`--url-style keep` (default) keeps every post and page at its old permalink, so only `?p=`, `?page_id=` and `/wp-content/uploads/` need redirects. `--url-style slug` moves posts to `/posts/<slug>/` and adds a redirect for each one. Links between your own posts and pages are rewritten to the new paths in both modes.
+
+## Measured on the demo site
+
+The demo is a local WordPress 7.1.3 seeded with WordPress's official theme test data. Run it with `demo/run-demo.sh`; it needs podman. The numbers below come from runs on 2026-10-26. The `run-demo.sh` output is in [docs/demo-transcript.txt](docs/demo-transcript.txt); the `slug` redirect figure is from a separate run with `--url-style slug`.
+
+| | Result |
+|---|---|
+| Source | 120 posts (118 published, 1 draft, 1 scheduled), 24 pages (23 published, 1 draft), 37 media |
+| Written | 144/144 items, 37/37 media originals (60 files incl. referenced sizes) |
+| Pages under 95% text kept | 0 |
+| Missing media / broken internal links | 0 / 0 |
+| Redirects through nginx 1.30.5 | `keep` 164/164 · `slug` 283/283 |
+| Copy with 1 image + 1 post deleted | 143/144 items, 36/37 media, 3 missing image references, exit 2 |
+
+## Not done yet
+
+- Tested only on the theme test data, not on real sites.
+- `_redirects` is not yet tested on Netlify or Cloudflare Pages. Its query-string rules (`?p=`) use Netlify's syntax.
+- No comment migration, no category/tag archive pages, and no site starter (Next.js/Astro). Archive links show up in the report as "links still to old site".
+- Shortcodes are detected but not converted. Blocks that Markdown can't express (tables, embeds, forms, SVG) are kept as HTML.
+
+## Principles
+
+The source site is only read, never written. Nothing is sent anywhere except requests to your own site. Credentials come only from the environment and are never logged. Dependencies are pinned in `uv.lock`, resolved from releases at least two weeks old.
+
+License: not chosen yet.
