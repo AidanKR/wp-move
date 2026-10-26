@@ -86,4 +86,6 @@ The demo is a local WordPress 7.1.3 seeded with WordPress's official theme test 
 
 The source site is only read, never written. Nothing is sent anywhere except requests to your own site. Credentials come only from the environment and are never logged. Dependencies are pinned in `uv.lock`, resolved from releases at least two weeks old.
 
-License: not chosen yet.
+## License
+
+[MIT](LICENSE) © 2026 AidanKR. The demo's test data (WordPress theme test data) is downloaded at run time and is not part of this repository or its license.
