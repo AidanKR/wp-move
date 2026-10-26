@@ -33,6 +33,7 @@ else
   podman run -d --pod "$POD" --name wpmove-wp \
     -e WORDPRESS_DB_HOST=127.0.0.1 -e WORDPRESS_DB_NAME=wordpress \
     -e WORDPRESS_DB_USER=wordpress -e WORDPRESS_DB_PASSWORD="$DB_PASSWORD" \
+    -e WORDPRESS_CONFIG_EXTRA="define('WP_ENVIRONMENT_TYPE', 'local');" \
     -v wpmove-wp:/var/www/html "$WP_IMAGE" >/dev/null
 fi
 

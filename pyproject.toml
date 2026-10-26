@@ -1,0 +1,22 @@
+[project]
+name = "wp-move"
+version = "0.0.1"
+description = "Move a WordPress site you own to a static site, with a verification report."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = [
+    "beautifulsoup4==4.15.0",
+    "markdownify==1.2.3",
+]
+
+[project.scripts]
+wp-move = "wp_move.cli:main"
+
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+# Resolve only releases at least two weeks old.
+exclude-newer = "2026-10-11T00:00:00Z"

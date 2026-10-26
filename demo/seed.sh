@@ -47,4 +47,12 @@ if [ "$(wp option get wpmove_seeded 2>/dev/null || echo no)" != "yes" ]; then
   done
   wp option add wpmove_seeded yes
 fi
+
+# Application Password for authenticated pulls (drafts, scheduled). WP allows it over http only
+# because up.sh sets WP_ENVIRONMENT_TYPE=local. Stored in .env, never printed.
+if ! grep -q '^WPMOVE_APP_PASSWORD=' .env; then
+  pw=$(wp user application-password create "$WP_ADMIN_USER" wp-move-demo --porcelain)
+  umask 077
+  { echo "WPMOVE_USER=$WP_ADMIN_USER"; echo "WPMOVE_APP_PASSWORD=$pw"; } >> .env
+fi
 echo "seeded"
