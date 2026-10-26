@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+import urllib.parse
 from dataclasses import dataclass, field
 
 from bs4 import BeautifulSoup, Comment
@@ -65,6 +66,17 @@ def html_to_markdown(html: str, rewrite_url=None) -> Converted:
                     if tag == "a" and el.string and el.string.strip() == old:
                         el.string = new  # fallback links that print their own URL
 
+    # Dynamic blocks (comment forms, query-loop paging) render links to the API request URI. A fragment
+    # still works on the static page; anything else cannot, so the link is unwrapped and reported.
+    for a in soup.find_all("a", href=True):
+        if "/wp-json/" in a["href"]:
+            frag = urllib.parse.urlsplit(a["href"]).fragment
+            if frag:
+                a["href"] = f"#{frag}"
+            else:
+                leftovers.append({"kind": "dynamic-link", "tag": "a"})
+                a.unwrap()
+
     kept: list[str] = []
     for tag in soup.find_all(KEEP_AS_HTML):
         if tag.find_parent(KEEP_AS_HTML):
@@ -78,7 +90,8 @@ def html_to_markdown(html: str, rewrite_url=None) -> Converted:
             if not m.group(1):
                 leftovers.append({"kind": "shortcode", "name": m.group(2)})
 
-    md = _Converter(heading_style="ATX", bullets="-", escape_underscores=False).convert_soup(soup)
+    md = _Converter(heading_style="ATX", bullets="-", escape_underscores=False,
+                    sup_symbol="<sup>", sub_symbol="<sub>").convert_soup(soup)
     for i, raw in enumerate(kept):
         md = md.replace(PLACEHOLDER.format(i), f"\n\n{raw}\n\n")
     md = re.sub(r"\n{3,}", "\n\n", md).strip() + "\n"

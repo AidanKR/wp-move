@@ -55,6 +55,18 @@ class ConvertTest(unittest.TestCase):
         c = html_to_markdown(f'<a href="{u}">{u}</a>', rewrite_url=mm.rewrite)
         self.assertNotIn("site.test", c.markdown)
 
+    def test_api_request_links_from_dynamic_blocks(self):
+        c = html_to_markdown('<a href="/wp-json/wp/v2/posts?page=1#respond">Reply</a> '
+                             '<a href="/wp-json/wp/v2/posts?page=1&query-2-page=2">Next</a>')
+        self.assertIn("[Reply](#respond)", c.markdown)
+        self.assertIn("Next", c.markdown)
+        self.assertNotIn("wp-json", c.markdown)
+        self.assertEqual(c.leftovers, [{"kind": "dynamic-link", "tag": "a", "count": 1}])
+
+    def test_sup_sub_kept_inline(self):
+        c = html_to_markdown("<p>up is <sup>super</sup>script, H<sub>2</sub>O</p>")
+        self.assertIn("<sup>super</sup>script, H<sub>2</sub>O", c.markdown)
+
     def test_blocks_used(self):
         raw = "<!-- wp:paragraph --><p>a</p><!-- /wp:paragraph --><!-- wp:core/image {\"id\":1} -->"
         self.assertEqual(blocks_used(raw), ["core/image", "paragraph"])
