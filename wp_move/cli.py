@@ -17,13 +17,16 @@ def main(argv: list[str] | None = None) -> int:
     pp.add_argument("site", help="site root URL, e.g. https://example.com")
     pp.add_argument("--out", default="out", help="output folder (default: out)")
     pp.add_argument("--no-media", action="store_true", help="skip downloading media files")
+    pp.add_argument("--url-style", choices=("keep", "slug"), default="keep",
+                    help="keep: new URLs reuse the old permalinks (default); slug: /posts/<slug>/ and /<page>/")
     args = p.parse_args(argv)
 
     # Credentials only from the environment, never from arguments (they would land in shell history).
     user = os.environ.get("WPMOVE_USER")
     app_password = os.environ.get("WPMOVE_APP_PASSWORD")
     try:
-        m = pull(args.site, args.out, user, app_password, with_media=not args.no_media)
+        m = pull(args.site, args.out, user, app_password, with_media=not args.no_media,
+                 url_style=args.url_style)
     except FetchError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
@@ -40,6 +43,9 @@ def main(argv: list[str] | None = None) -> int:
     print("written:", ", ".join(f"{t}/{s}={n}" for (t, s), n in sorted(status.items())))
     print(f"media: {len(files_ok)}/{len(files)} files ok ({len(m['media'])} URLs)")
     print("leftovers:", dict(left) or "none")
+    r = m["redirects"]
+    print(f"redirects ({m['url_style']}): {r['path_rules']} path rules, {r['query_rules']} query rules, "
+          f"{r['unmapped']} archive URLs without a target")
     print(f"manifest: {os.path.join(args.out, '.wp-move', 'manifest.json')}")
     return 0
 

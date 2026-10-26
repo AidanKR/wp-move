@@ -2,7 +2,14 @@
 
 Move a WordPress site you own to a static site, and get a report that shows what moved, what is missing, and what broke.
 
-Status: early work. Only the local demo source site exists so far (see [`demo/`](demo/)).
+Status: early work. `pull` and redirects work against the local demo site (see [`demo/`](demo/)); the verification report is next.
+
+```bash
+uv sync
+WPMOVE_USER=... WPMOVE_APP_PASSWORD=... uv run wp-move pull https://example.com --out out --url-style keep
+```
+
+`--url-style keep` (default) reuses the old permalinks, so only `?p=` / `?page_id=` and `/wp-content/uploads/` need redirects; `slug` moves posts to `/posts/<slug>/`. Redirects are written to `out/redirects/` as `_redirects`, `nginx-maps.conf` + `nginx-server.conf`, and `url-map.csv`. The nginx files are checked against a real nginx with `demo/check_redirects.py`; the `_redirects` file has not been tested on Netlify or Cloudflare Pages yet.
 
 Planned MVP:
 - Pull posts, pages, drafts, media, categories, and tags through the WP REST API.
