@@ -30,6 +30,22 @@ Re-check an output folder at any time, optionally against a server running the g
 uv run wp-move report --out out --server http://localhost:8080
 ```
 
+Without cloning, any release can be run straight from GitHub:
+
+```bash
+uvx --from git+https://github.com/AidanKR/wp-move@v0.0.1 wp-move pull https://your-site.example --out out
+```
+
+### As an agent skill
+
+[`skills/wp-move/SKILL.md`](skills/wp-move/SKILL.md) lets Claude Code (or another agent that reads skills) run wp-move and summarize the report from `report.json`. Copy it into your skills folder:
+
+```bash
+mkdir -p ~/.claude/skills/wp-move && curl -fsSL https://raw.githubusercontent.com/AidanKR/wp-move/v0.0.1/skills/wp-move/SKILL.md -o ~/.claude/skills/wp-move/SKILL.md
+```
+
+The skill pins wp-move to a release tag, and it may only run that command and read files. It asks you to set credentials in your own shell instead of pasting them into chat.
+
 ## What you get
 
 ```
