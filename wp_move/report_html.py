@@ -49,6 +49,10 @@ def render(r: dict) -> str:
         _card("missing image/media files", str(s["missing_media_refs"]), lvl(s["missing_media_refs"])),
         _card("broken internal links", str(s["broken_internal_links"]), lvl(s["broken_internal_links"])),
         _card("links still to old site", str(s["links_to_old_site"]), "warn" if s["links_to_old_site"] else "ok"),
+        _card("links that hop through a redirect", str(s.get("links_via_redirect", 0)),
+              "warn" if s.get("links_via_redirect") else "ok"),
+        _card("canonicals pointing at old URLs", str(s.get("canonicals_to_old_url", 0)),
+              "warn" if s.get("canonicals_to_old_url") else "ok"),
         _card("kept as HTML / dropped", f'{s["kept_html"]} / {s["dropped"]}', "warn" if s["dropped"] else "ok"),
         _card("archive URLs without target", str(s["unmapped_archives"]), "warn" if s["unmapped_archives"] else "ok"),
     ]

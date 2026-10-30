@@ -67,6 +67,27 @@ class VerifyTest(unittest.TestCase):
             self.assertEqual(r["old_links_by_class"], {"taxonomy-archive": 1})
             self.assertEqual(s["kept_html"], 2)
 
+    def test_links_and_canonicals_through_redirects(self):
+        with tempfile.TemporaryDirectory() as d:
+            make_out(d)
+            # Post 1 moved from /old-a/ to /a/: a link to /old-a/ still works, but through a 301.
+            with open(f"{d}/redirects/url-map.csv", encoding="utf-8") as f:
+                rows = f.read().replace(f"{HOME}/a/,/a/,,/a/", f"{HOME}/old-a/,/old-a/,,/a/")
+            _write(f"{d}/redirects/url-map.csv", rows)
+            _write(f"{d}/content/posts/b.md", '---\ntitle: "B"\ncanonical: "' + HOME + '/old-a/"\n---\n\n'
+                   f'See [a](/old-a/) and [abs]({HOME}/old-a/) and [id](/?p=1) and [gone](/nope/).\n'
+                   f'<link rel="canonical" href="/old-a/">\n')
+            r = verify(d)
+            s = r["summary"]
+            self.assertEqual(sorted(h["url"] for h in r["links_via_redirect"]),
+                             sorted(["/old-a/", f"{HOME}/old-a/", "/?p=1"]))
+            self.assertTrue(all(h["to"] == "/a/" for h in r["links_via_redirect"]))
+            self.assertEqual([b["url"] for b in r["broken_links"]], ["/nope/"])
+            self.assertEqual(r["old_links_by_class"].get("redirected"), 1)
+            self.assertEqual(s["canonicals_to_old_url"], 2)
+            self.assertTrue(all(c["to"] == "/a/" for c in r["old_canonicals"]))
+            self.assertIn("hop through a redirect", render(r))
+
     def test_deleted_image_is_reported(self):
         with tempfile.TemporaryDirectory() as d:
             make_out(d, with_image=False)

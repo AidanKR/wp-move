@@ -69,6 +69,8 @@ out/
 | Internal links with no target in the new site | yes |
 | Share of each page's source words kept in the Markdown (flags pages under 95%) | no, listed |
 | Links that still point at the old site, by kind (archives, admin, home, …) | no, listed |
+| Links that only work through a redirect (an old permalink or `?p=` that the redirects send to the new path): not broken, but an extra hop each time | no, listed |
+| Canonical URLs (front matter `canonical:` or a kept `<link rel="canonical">`) that point at the old site or an old path | no, listed |
 | Content kept as raw HTML, dropped (script/style), or unrendered shortcodes | no, listed |
 | Images hosted elsewhere (not downloaded) | no, listed |
 | Category/tag archive URLs that have no page yet | no, listed |

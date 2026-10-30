@@ -20,6 +20,8 @@ WORD_RE = re.compile(r"\w+", re.UNICODE)
 URL_RE = re.compile(r"https?://\S+|(?<![\w/])/[\w./%~-]+")
 MD_LINK_RE = re.compile(r"(!?)\[([^\]]*)\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 HTML_ATTR_RE = re.compile(r"\b(href|src|poster)=\"([^\"]+)\"")
+CANONICAL_HTML_RE = re.compile(r"<link\b[^>]*\brel=\"canonical\"[^>]*\bhref=\"([^\"]+)\"|<link\b[^>]*\bhref=\"([^\"]+)\"[^>]*\brel=\"canonical\"", re.I)
+CANONICAL_FM_RE = re.compile(r"^canonical(?:_url)?:\s*\"?([^\"\n]+)\"?\s*$", re.M)
 
 
 def _words(text: str) -> list[str]:
@@ -50,16 +52,31 @@ def coverage(src: str, out: str) -> float:
     return sum(min(n, b[w]) for w, n in a.items()) / total
 
 
-def _body(path: str) -> str:
+def _split(path: str) -> tuple[str, str]:
+    """(front matter, body) of an output file."""
     with open(path, encoding="utf-8") as f:
         text = f.read()
-    return text.split("\n---\n", 1)[1] if text.startswith("---\n") else text
+    if text.startswith("---\n") and "\n---\n" in text:
+        fm, body = text[4:].split("\n---\n", 1)
+        return fm, body
+    return "", text
+
+
+def _body(path: str) -> str:
+    return _split(path)[1]
+
+
+def _canonicals(fm: str, md: str) -> list[str]:
+    """Canonical URLs set in front matter or kept HTML."""
+    found = [m.group(1).strip() for m in CANONICAL_FM_RE.finditer(fm)]
+    found += [m.group(1) or m.group(2) for m in CANONICAL_HTML_RE.finditer(md)]
+    return found
 
 
 def _links(md: str) -> list[tuple[str, str]]:
     """(kind, url) for Markdown links/images and href/src attributes in kept HTML."""
     found = [("image" if m.group(1) else "link", m.group(3)) for m in MD_LINK_RE.finditer(md)]
-    for m in HTML_ATTR_RE.finditer(md):
+    for m in HTML_ATTR_RE.finditer(CANONICAL_HTML_RE.sub(" ", md)):  # canonicals are checked on their own
         found.append(("image" if m.group(1) in ("src", "poster") else "link", m.group(2)))
     return found
 
@@ -138,15 +155,28 @@ def verify(out: str, server: str | None = None) -> dict:
 
     # 2-4. Per item: text coverage, links and images.
     new_paths = {r["new_path"].rstrip("/") or "/" for r in rows}
+    # Old permalinks that the generated redirects send somewhere else: links to them still work, through an extra hop.
+    redirected = {r["old_path"].rstrip("/") or "/": r["new_path"] for r in rows
+                  if r["status"] == "publish" and r["old_path"] and not r["old_query"] and r["old_path"] != r["new_path"]}
+    redirected_ids = {f"p={r['wp_id']}": r["new_path"] for r in rows if r["status"] == "publish"}
+    redirected_ids.update({f"page_id={r['wp_id']}": r["new_path"] for r in rows
+                           if r["status"] == "publish" and r["type"] == "page"})
+
+    def via_redirect(path: str, query: str) -> str | None:
+        if query and path in ("/", "/index.php"):
+            return redirected_ids.get(query)
+        return redirected.get(path.rstrip("/") or "/")
+
     site_host = urllib.parse.urlsplit(home).netloc
     pages, missing_media, broken_links, old_links, external_images = [], [], [], [], collections.Counter()
+    hop_links, old_canonicals = [], []
     src_by_id = {(k[:-1], x["id"]): x for k in ("posts", "pages") for x in source[k]}
     for item in manifest["items"]:
         path = os.path.join(out, item["out_path"])
         if not os.path.exists(path):
             pages.append({**_item_head(item), "coverage": 0.0, "missing_file": True})
             continue
-        md = _body(path)
+        fm, md = _split(path)
         src = src_by_id.get((item["type"], item["wp_id"]), {})
         content = src.get("content") or {}
         cov = 1.0 if content.get("protected") else coverage(source_text(content.get("rendered", "")), markdown_text(md))
@@ -161,11 +191,25 @@ def verify(out: str, server: str | None = None) -> dict:
                     if not os.path.exists(os.path.join(out, "public", p.lstrip("/"))):
                         missing_media.append({**_item_head(item), "url": url})
                 elif (p.rstrip("/") or "/") not in new_paths and kind == "link":
-                    broken_links.append({**_item_head(item), "url": url})
+                    target = via_redirect(p, u.query)
+                    if target:
+                        hop_links.append({**_item_head(item), "url": url, "to": target})
+                    else:
+                        broken_links.append({**_item_head(item), "url": url})
             elif u.netloc == site_host:
                 parts = split_link(url, home)
+                target = parts and via_redirect(*parts)
+                if target:
+                    hop_links.append({**_item_head(item), "url": url, "to": target})
                 old_links.append({**_item_head(item), "url": url, "kind": kind,
-                                  "class": classify_old_link(parts[0] if parts else u.path)})
+                                  "class": "redirected" if target else classify_old_link(parts[0] if parts else u.path)})
+        for c in _canonicals(fm, md):
+            cu = urllib.parse.urlsplit(c)
+            if cu.netloc and cu.netloc != site_host:
+                continue  # points at another site on purpose
+            parts = split_link(c, home) or (urllib.parse.unquote(cu.path), cu.query)
+            if cu.netloc == site_host or (parts[0].rstrip("/") or "/") not in new_paths:
+                old_canonicals.append({**_item_head(item), "url": c, "to": via_redirect(*parts)})
             elif kind == "image" and u.netloc:
                 external_images[u.netloc] += 1
 
@@ -193,6 +237,7 @@ def verify(out: str, server: str | None = None) -> dict:
             "text_below_threshold": len(low), "text_threshold": TEXT_THRESHOLD,
             "missing_media_refs": len(missing_media), "broken_internal_links": len(broken_links),
             "links_to_old_site": len(old_links),
+            "links_via_redirect": len(hop_links), "canonicals_to_old_url": len(old_canonicals),
             "kept_html": sum(n for (k, _), n in leftovers.items() if k == "html"),
             "dropped": sum(n for (k, _), n in leftovers.items() if k == "dropped"),
             "shortcodes": sum(n for (k, _), n in leftovers.items() if k == "shortcode"),
@@ -205,6 +250,8 @@ def verify(out: str, server: str | None = None) -> dict:
         "broken_links": broken_links,
         "old_links_by_class": dict(collections.Counter(l["class"] for l in old_links)),
         "old_links": old_links,
+        "links_via_redirect": hop_links,
+        "old_canonicals": old_canonicals,
         "external_image_hosts": dict(external_images.most_common()),
         "leftovers": [{"kind": k, "what": w, "count": n} for (k, w), n in leftovers.most_common()],
         "unmapped": unmapped,
